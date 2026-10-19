@@ -22,7 +22,7 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: var(--bg); color: var(--text); padding: 16px; }
-    .container { max-width: 1600px; margin: 0 auto; }
+    .container { max-width: 1650px; margin: 0 auto; }
     header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
     h1 { font-size: 1.45rem; font-weight: 800; color: var(--accent); }
     .badge { font-size: 0.75rem; padding: 5px 12px; border-radius: 6px; background: var(--card); border: 1px solid var(--border); color: var(--muted); font-weight: 600; }
@@ -64,6 +64,9 @@
     .highlight { color: var(--accent); font-weight: 800; }
     .green { color: var(--green); font-weight: 800; }
     .blue { color: var(--blue); font-weight: 800; }
+    .badge-eye { font-weight: 800; padding: 2px 6px; border-radius: 4px; font-size: 0.72rem; }
+    .badge-g { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
+    .badge-c { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
     .empty-state { padding: 32px; color: var(--muted); text-align: center; font-weight: 600; }
   </style>
 </head>
@@ -117,6 +120,7 @@
           <tr>
             <th onclick="sortTable('seasonName')">Season <span class="sort-arrow" id="s-seasonName"></span></th>
             <th onclick="sortTable('date')">Date <span class="sort-arrow" id="s-date"></span></th>
+            <th onclick="sortTable('glassesOrContacts')">G/C <span class="sort-arrow" id="s-glassesOrContacts"></span></th>
             <th onclick="sortTable('opponent')">Opponent <span class="sort-arrow" id="s-opponent"></span></th>
             <th onclick="sortTable('result')">W/L <span class="sort-arrow" id="s-result"></span></th>
             <th onclick="sortTable('score')">Score <span class="sort-arrow" id="s-score"></span></th>
@@ -152,6 +156,7 @@
     // Available categories to filter on
     const CATEGORIES = [
       { id: 'pts', label: 'Points (PTS)', type: 'num' },
+      { id: 'glassesOrContacts', label: 'Vision (G / C)', type: 'str' },
       { id: 'result', label: 'Result (W / L)', type: 'str' },
       { id: 'trueShots', label: 'True Shots', type: 'num' },
       { id: 'plusMinus', label: '+/- Differential', type: 'num' },
@@ -178,6 +183,20 @@
       { cat: 'pts', op: '>=', val: '10' }
     ];
 
+    function applyHistoricalGlassesDefaults() {
+      if (state && Array.isArray(state.seasons)) {
+        state.seasons.forEach(season => {
+          if (Array.isArray(season.games)) {
+            season.games.forEach(g => {
+              if (!g.glassesOrContacts && !g.gc) {
+                g.glassesOrContacts = "G";
+              }
+            });
+          }
+        });
+      }
+    }
+
     async function fetchLatestData() {
       setStatus("Syncing with Google Drive...");
       try {
@@ -185,6 +204,7 @@
         const data = await res.json();
         if (data && Array.isArray(data.seasons)) {
           state = data;
+          applyHistoricalGlassesDefaults();
           localStorage.setItem('cayden_games_data', JSON.stringify(state));
           setStatus("Synced with Drive");
         } else {
@@ -201,7 +221,10 @@
     function fallbackLocal(msg) {
       const local = localStorage.getItem('cayden_games_data');
       if (local) {
-        try { state = JSON.parse(local); } catch(e){}
+        try {
+          state = JSON.parse(local);
+          applyHistoricalGlassesDefaults();
+        } catch(e){}
       }
       setStatus(msg);
     }
@@ -261,6 +284,13 @@
               <option value="L" ${rule.val === 'L' ? 'selected' : ''}>Loss (L)</option>
             </select>
           `;
+        } else if (rule.cat === 'glassesOrContacts') {
+          valInput = `
+            <select onchange="updateRule(${idx}, 'val', this.value)">
+              <option value="G" ${rule.val === 'G' ? 'selected' : ''}>Glasses (G)</option>
+              <option value="C" ${rule.val === 'C' ? 'selected' : ''}>Contacts (C)</option>
+            </select>
+          `;
         } else {
           valInput = `<input type="number" step="any" placeholder="Value" value="${rule.val}" oninput="updateRule(${idx}, 'val', this.value)" style="width:110px;" />`;
         }
@@ -299,7 +329,7 @@
       const catObj = CATEGORIES.find(c => c.id === newCat);
       if (catObj.type === 'str') {
         rules[idx].op = '==';
-        rules[idx].val = 'W';
+        rules[idx].val = newCat === 'glassesOrContacts' ? 'G' : 'W';
       } else {
         rules[idx].op = '>=';
         rules[idx].val = '0';
@@ -343,9 +373,13 @@
       const threePct = threePa > 0 ? (threePm / threePa) * 100 : 0;
       const ftPct = fta > 0 ? (ftm / fta) * 100 : 0;
 
+      const rawGC = (g.glassesOrContacts || g.gc || 'G').toUpperCase();
+      const vision = rawGC === 'C' ? 'C' : 'G';
+
       return {
         seasonName: seasonName || '-',
         date: g.date || '-',
+        glassesOrContacts: vision,
         opponent: g.opponent || '-',
         result: (g.result || 'W').toUpperCase(),
         score: g.score || '-',
@@ -362,7 +396,7 @@
 
     function runQuery() {
       const seasonVal = document.getElementById('season-selector').value;
-      const logic = document.getElementById('logic-gate').value; // 'AND' or 'OR'
+      const logic = document.getElementById('logic-gate').value;
 
       let allGames = [];
       if (seasonVal === 'ALL') {
@@ -380,7 +414,6 @@
         }
       }
 
-      // Filter against rules
       currentFilteredGames = allGames.filter(g => {
         if (rules.length === 0) return true;
 
@@ -398,9 +431,9 @@
 
     function testRule(game, rule) {
       const catVal = game[rule.cat];
-      const targetVal = rule.cat === 'result' ? rule.val.toUpperCase() : parseFloat(rule.val);
+      const targetVal = (rule.cat === 'result' || rule.cat === 'glassesOrContacts') ? rule.val.toUpperCase() : parseFloat(rule.val);
 
-      if (rule.cat === 'result') {
+      if (rule.cat === 'result' || rule.cat === 'glassesOrContacts') {
         if (rule.op === '==') return String(catVal).toUpperCase() === targetVal;
         if (rule.op === '!=') return String(catVal).toUpperCase() !== targetVal;
         return true;
@@ -441,7 +474,6 @@
         return sortAsc ? valA - valB : valB - valA;
       });
 
-      // Update arrow icons
       document.querySelectorAll('.sort-arrow').forEach(el => el.textContent = '');
       const activeEl = document.getElementById(`s-${sortColumn}`);
       if (activeEl) {
@@ -520,24 +552,26 @@
       tbody.innerHTML = '';
 
       if (currentFilteredGames.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="19" class="empty-state">No box scores match your current filter conditions.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="20" class="empty-state">No box scores match your current filter conditions.</td></tr>`;
         return;
       }
 
       currentFilteredGames.forEach(g => {
         const pmFormatted = g.plusMinus > 0 ? `+${g.plusMinus}` : `${g.plusMinus}`;
         const fgStr = g.fga > 0 ? `${g.fgPct.toFixed(1)}%` : '-';
+        const gcBadge = g.glassesOrContacts === 'C' ? `<span class="badge-eye badge-c">C</span>` : `<span class="badge-eye badge-g">G</span>`;
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td style="font-weight:700; color:var(--muted);">${g.seasonName}</td>
           <td>${g.date}</td>
+          <td>${gcBadge}</td>
           <td style="font-weight:700;">${g.opponent}</td>
           <td style="color:${g.result === 'W' ? 'var(--green)' : 'var(--red)'}; font-weight:800;">${g.result}</td>
           <td>${g.score}</td>
           <td>${g.min}</td>
           <td class="highlight">${g.pts}</td>
-          <td>${g.reb}</td>
+          <td>${reb = g.reb}</td>
           <td>${g.ast}</td>
           <td>${g.stl}</td>
           <td>${g.fto}</td>
