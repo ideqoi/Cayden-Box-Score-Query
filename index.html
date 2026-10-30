@@ -138,6 +138,8 @@
             <th onclick="sortTable('ftm')">FTM-A <span class="sort-arrow" id="s-ftm"></span></th>
             <th onclick="sortTable('fgPct')">FG% <span class="sort-arrow" id="s-fgPct"></span></th>
             <th onclick="sortTable('trueShots')">True Shots <span class="sort-arrow" id="s-trueShots"></span></th>
+            <th onclick="sortTable('tsPerMin')" title="True Shots / minutes">TS/Min <span class="sort-arrow" id="s-tsPerMin"></span></th>
+            <th onclick="sortTable('tsPer32')" title="True Shots per 32 minutes">TS/32 <span class="sort-arrow" id="s-tsPer32"></span></th>
             <th onclick="sortTable('plusMinus')">+/- <span class="sort-arrow" id="s-plusMinus"></span></th>
           </tr>
         </thead>
@@ -160,6 +162,8 @@
       { id: 'glassesOrContacts', label: 'Vision (G / C)', type: 'str' },
       { id: 'result', label: 'Result (W / L)', type: 'str' },
       { id: 'trueShots', label: 'True Shots', type: 'num' },
+      { id: 'tsPerMin', label: 'True Shots / Min (TS/Min)', type: 'num' },
+      { id: 'tsPer32', label: 'True Shots per 32 (TS/32)', type: 'num' },
       { id: 'plusMinus', label: '+/- Differential', type: 'num' },
       { id: 'min', label: 'Minutes Played (MIN)', type: 'num' },
       { id: 'reb', label: 'Rebounds (REB)', type: 'num' },
@@ -377,6 +381,7 @@
       const rawGC = (g.glassesOrContacts || g.gc || 'G').toUpperCase();
       const vision = rawGC === 'C' ? 'C' : 'G';
 
+      const minutes = Number(g.min) || 0;
       return {
         seasonName: seasonName || '-',
         date: g.date || '-',
@@ -384,13 +389,15 @@
         opponent: g.opponent || '-',
         result: (g.result || 'W').toUpperCase(),
         score: g.score || '-',
-        min: Number(g.min) || 0,
+        min: minutes,
         pts, reb, ast, stl, fto, fouls, drnFls,
         twoPm, twoPa, twoPct,
         threePm, threePa, threePct,
         ftm, fta, ftPct,
         fgm, fga, fgPct,
         trueShots,
+        tsPerMin: minutes > 0 ? trueShots / minutes : 0,
+        tsPer32: minutes > 0 ? (trueShots / minutes) * 32 : 0,
         plusMinus
       };
     }
@@ -524,6 +531,9 @@
       const apg = (totals.ast / n).toFixed(1);
       const spg = (totals.stl / n).toFixed(1);
       const tsPerG = (totals.trueShots / n).toFixed(1);
+      const rateGames = currentFilteredGames.filter(g => g.min > 0);
+      const avgTsPerMin = rateGames.length ? (rateGames.reduce((s,g)=>s+g.tsPerMin,0)/rateGames.length) : null;
+      const avgTsPer32 = rateGames.length ? (rateGames.reduce((s,g)=>s+g.tsPer32,0)/rateGames.length) : null;
       const avgPm = (totals.plusMinus / n);
       const pmStr = (avgPm > 0 ? '+' : '') + avgPm.toFixed(1);
 
@@ -540,6 +550,8 @@
         <div class="stat-card"><div class="label">APG</div><div class="val">${apg}</div></div>
         <div class="stat-card"><div class="label">SPG</div><div class="val" style="color:var(--blue);">${spg}</div></div>
         <div class="stat-card"><div class="label">True Shots/G</div><div class="val" style="color:var(--accent);">${tsPerG}</div></div>
+        <div class="stat-card"><div class="label">Avg TS/Min</div><div class="val">${avgTsPerMin!==null?avgTsPerMin.toFixed(2):'-'}</div></div>
+        <div class="stat-card"><div class="label">Avg TS/32</div><div class="val" style="color:var(--accent);">${avgTsPer32!==null?avgTsPer32.toFixed(1):'-'}</div></div>
         <div class="stat-card"><div class="label">Avg +/-</div><div class="val" style="color:${avgPm >= 0 ? 'var(--green)' : 'var(--red)'};">${pmStr}</div></div>
         <div class="stat-card">
           <div class="label">FG%</div>
@@ -569,7 +581,7 @@
       tbody.innerHTML = '';
 
       if (currentFilteredGames.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="20" class="empty-state">No box scores match your current filter conditions.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="22" class="empty-state">No box scores match your current filter conditions.</td></tr>`;
         return;
       }
 
@@ -599,6 +611,8 @@
           <td>${g.ftm}/${g.fta}</td>
           <td style="font-weight:700;">${fgStr}</td>
           <td class="green">${g.trueShots}</td>
+          <td>${g.min>0?g.tsPerMin.toFixed(2):'-'}</td>
+          <td>${g.min>0?g.tsPer32.toFixed(1):'-'}</td>
           <td style="font-weight:700; color:${g.plusMinus >= 0 ? 'var(--green)' : 'var(--red)'};">${pmFormatted}</td>
         `;
         tbody.appendChild(tr);
